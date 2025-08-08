@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heart Disease Prediction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .tooltip {
+            position: relative;
+        }
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 10;
+        }
+        .spinner {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 to-gray-100 font-sans min-h-screen">
+    <div class="container mx-auto p-6">
+        <h1 class="text-4xl font-extrabold text-center text-blue-700 mb-8 drop-shadow-md">Heart Disease Prediction</h1>
+        <div class="bg-white p-8 rounded-xl shadow-2xl max-w-3xl mx-auto transition-all duration-300 hover:shadow-xl">
+            <p class="text-gray-600 mb-6 text-center">Enter patient details to predict heart disease risk.</p>
+            
+            <!-- Form -->
+            <form action="/" method="POST" id="prediction-form" class="grid grid-cols-1 md:grid-cols-2 gap-6" onsubmit="showSpinner()">
+                <div class="tooltip" data-tooltip="Patient's age (0-120 years)">
+                    <label class="block text-sm font-medium text-gray-700">Age</label>
+                    <input type="number" name="age" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 transition" min="0" max="120" step="1">
+                </div>
+                <div class="tooltip" data-tooltip="0: Female, 1: Male">
+                    <label class="block text-sm font-medium text-gray-700">Sex</label>
+                    <select name="sex" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 transition">
+                        <option value="0">Female</option>
+                        <option value="1">Male</option>
+                    </select>
+                </div>
+                <div class="tooltip" data-tooltip="0: Typical Angina, 1: Atypical Angina, 2: Non-Anginal Pain, 3: Asymptomatic">
+                    <label class="block text-sm font-medium text-gray-700">Chest Pain Type (0-3)</label>
+                    <select name="cp" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 transition">
+                        <option value="0">Typical Angina</option>
+                        <option value="1">Atypical Angina</option>
+                        <option value="2">Non-Anginal Pain</option>
+                        <option value="3">Asymptomatic</option>
+                    </select>
+                </div>
+                <div class="tooltip" data-tooltip="Resting blood pressure in mm Hg (50-200)">
+                    <label class="block text-sm font-medium text-gray-700">Resting BP (mm Hg)</label>
+                    <input type="number" name="trtbps" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 transition" min="50" max="200" step="1">
+                </div>
+                <div class="tooltip" data-tooltip="Cholesterol level in mg/dl (100-600)">
+                    <label class="block text-sm font-medium text-gray-700">Cholesterol (mg/dl)</label>
+                    <input type="number" name="chol" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 transition" min="100" max="600" step="1">
+                </div>
+                <div class="md:col-span-2 flex space-x-4">
+                    <button type="submit" class="flex-1 bg-gradient-to-r from-blue-600 to-blue-800 text-white p-3 rounded-lg hover:from-blue-700 hover:to-blue-900 focus:ring-2 focus:ring-blue-400 transition">
+                        Predict
+                    </button>
+                    <button type="button" onclick="document.getElementById('prediction-form').reset(); document.getElementById('spinner').style.display='none';" class="flex-1 bg-gradient-to-r from-gray-400 to-gray-600 text-white p-3 rounded-lg hover:from-gray-500 hover:to-gray-700 focus:ring-2 focus:ring-gray-400 transition">
+                        Reset
+                    </button>
+                </div>
+            </form>
+            <div id="spinner" class="spinner mt-4"></div>
+
+            <!-- Error Display -->
+            {% if error %}
+                <div class="mt-6 p-4 bg-red-100 text-red-700 rounded-lg text-center animate-pulse">
+                    <p class="font-medium">Error: {{ error }}</p>
+                </div>
+            {% endif %}
+
+            <!-- Result Display -->
+            {% if result %}
+                <div class="mt-8 p-6 bg-green-100 text-green-700 rounded-lg">
+                    <h2 class="text-2xl font-semibold mb-3 text-center">{{ result.prediction }}</h2>
+                    <p class="mb-3 text-center">Probability of Heart Disease: {{ result.probability }}%</p>
+                    <h3 class="text-xl font-medium mb-3 text-center">Input Data</h3>
+                    <ul class="list-disc list-inside mb-4 text-center">
+                        {% for feature, value in result.input_data.items() %}
+                            <li>{{ feature }}: {{ value }}</li>
+                        {% endfor %}
+                    </ul>
+                    <h3 class="text-xl font-medium mb-3 text-center">Feature Importance</h3>
+                    <canvas id="featureChart" class="w-full h-64"></canvas>
+                    <script>
+                        console.log('Feature importance data:', {{ result.feature_importance | tojson }});
+                        const ctx = document.getElementById('featureChart').getContext('2d');
+                        const featureData = {{ result.feature_importance | tojson }};
+                        try {
+                            new Chart(ctx, {
+                                type: 'bar',
+                                data: {
+                                    labels: featureData.map(item => item.feature),
+                                    datasets: [{
+                                        label: 'Feature Importance (%)',
+                                        data: featureData.map(item => item.importance),
+                                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                                        borderColor: 'rgba(59, 130, 246, 1)',
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    scales: {
+                                        y: {
+                                            beginAtZero: true,
+                                            title: {
+                                                display: true,
+                                                text: 'Importance (%)'
+                                            }
+                                        },
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Features'
+                                            }
+                                        }
+                                    },
+                                    plugins: {
+                                        legend: {
+                                            display: true,
+                                            position: 'top'
+                                        }
+                                    }
+                                }
+                            });
+                        } catch (e) {
+                            console.error('Chart.js error:', e.message);
+                        }
+                    </script>
+                </div>
+            {% endif %}
+
+            <!-- Prediction History -->
+            {% if history %}
+                <div class="mt-8">
+                    <h3 class="text-xl font-medium mb-4 text-center text-blue-700">Prediction History (Last 5)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-blue-100">
+                                    <th class="p-3 text-sm font-semibold text-blue-700">Prediction</th>
+                                    <th class="p-3 text-sm font-semibold text-blue-700">Probability</th>
+                                    <th class="p-3 text-sm font-semibold text-blue-700">Inputs</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in history %}
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="p-3">{{ entry.prediction }}</td>
+                                        <td class="p-3">{{ entry.probability }}%</td>
+                                        <td class="p-3">
+                                            {% for feature, value in entry.inputs.items() %}
+                                                {{ feature }}: {{ value }}{% if not loop.last %}, {% endif %}
+                                            {% endfor %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function showSpinner() {
+            document.getElementById('spinner').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
